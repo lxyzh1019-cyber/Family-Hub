@@ -135,4 +135,111 @@ const WEEK_AHEAD = [
   { day: "Sun", date:  3, label: "Family day", cat: null },
 ];
 
-Object.assign(window, { FAMILY, CATEGORIES, APPS, TODAY, CHORES, WEEK_AHEAD });
+function getPlannerTodayKey() {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Edmonton",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return fmt.format(new Date());
+}
+
+function dayKeyToDate(dayKey) {
+  const [y, m, d] = dayKey.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function getWeekStartKey(dayKey) {
+  const date = dayKeyToDate(dayKey);
+  const day = date.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + mondayOffset);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function toTimeLabel(startMin) {
+  if (typeof startMin !== "number" || Number.isNaN(startMin)) return "Anytime";
+  const hour24 = Math.floor(startMin / 60);
+  const minute = startMin % 60;
+  const suffix = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = ((hour24 + 11) % 12) + 1;
+  return `${hour12}:${String(minute).padStart(2, "0")} ${suffix}`;
+}
+
+function getRoutineName(actId, profileData, sharedData) {
+  const builtIn = {
+    routine_morning: "Morning Routine",
+    routine_afterschool: "After-School Routine",
+    routine_evening: "Evening Routine",
+  };
+  if (builtIn[actId]) return builtIn[actId];
+  const ownCustom = (profileData.customActivities || []).find((a) => a.id === actId);
+  if (ownCustom && ownCustom.name) return ownCustom.name;
+  const routineId = actId.startsWith("routine_") ? actId.slice("routine_".length) : null;
+  if (routineId) {
+    const sharedRoutine = (sharedData.routineTemplates || []).find((r) => r.id === routineId);
+    if (sharedRoutine && sharedRoutine.title) return sharedRoutine.title;
+  }
+  return "Routine";
+}
+
+function readPlannerTodayItems() {
+  try {
+    const raw = window.localStorage.getItem("weeklyplanner-v3");
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    const profiles = parsed && parsed.profiles;
+    if (!profiles) return [];
+
+    const todayKey = getPlannerTodayKey();
+    const todayDate = dayKeyToDate(todayKey);
+    const dayIdx = (todayDate.getDay() + 6) % 7;
+    const weekKey = getWeekStartKey(todayKey);
+    const people = ["jenn", "jess"];
+    const items = [];
+
+    people.forEach((who) => {
+      const profileData = profiles[who];
+      if (!profileData) return;
+
+      const dayBlocks = profileData.weeks && profileData.weeks[todayKey];
+      if (Array.isArray(dayBlocks)) {
+        dayBlocks.forEach((block) => {
+          if (!block || typeof block.actId !== "string") return;
+          if (!block.actId.startsWith("routine_")) return;
+          items.push({
+            time: toTimeLabel(block.startMin),
+            who,
+            what: getRoutineName(block.actId, profileData, parsed.shared || {}),
+            cat: "utility",
+          });
+        });
+      }
+
+      const todos = Array.isArray(profileData.todos) ? profileData.todos : [];
+      todos.forEach((todo) => {
+        if (!todo || todo.weekKey !== weekKey || todo.done) return;
+        if (todo.assignedDay != null && todo.assignedDay !== dayIdx) return;
+        if (!todo.text || !todo.text.trim()) return;
+        items.push({
+          time: "Anytime",
+          who,
+          what: `To-do: ${todo.text.trim()}`,
+          cat: "utility",
+        });
+      });
+    });
+
+    return items;
+  } catch (e) {
+    return [];
+  }
+}
+
+const PLANNER_TODAY = readPlannerTodayItems();
+
+Object.assign(window, { FAMILY, CATEGORIES, APPS, TODAY, CHORES, WEEK_AHEAD, PLANNER_TODAY });

@@ -1,6 +1,7 @@
 // Today panel — schedule + chore strip + week ahead
 const TodayPanel = () => {
   const [completed, setCompleted] = useState({});
+  const scheduleItems = PLANNER_TODAY.length ? PLANNER_TODAY : TODAY;
 
   const toggle = (key) => setCompleted(c => ({ ...c, [key]: !c[key] }));
 
@@ -12,7 +13,7 @@ const TodayPanel = () => {
           <div className="panel-head__title">What's on</div>
         </div>
         <ul className="schedule">
-          {TODAY.map((item, i) => {
+          {scheduleItems.map((item, i) => {
             const cat = CATEGORIES[item.cat];
             const person = FAMILY[item.who];
             const key = `s-${i}`;
